@@ -23,6 +23,21 @@ public:
     void begin();                               // Config laden, Strip/Sensor/Uhr starten
     void loop(bool wifiConnected);              // nicht-blockierend, im loop() aufrufen
     void registerRoutes(AsyncWebServer& server);
+    float temperature() const { return getState().temp; }   // °C; 999.99 = Sensorfehler
+
+    // Kurzüberblick für die OLED-Anzeige
+    struct Overview {
+        bool    timeValid;
+        uint8_t hour, minute;           // Lokalzeit
+        float   temp;                   // °C; >= 999 = Sensorfehler
+        uint8_t level[kChannels];       // Kanalhelligkeit in %
+        bool    moonLit;
+    };
+    Overview overview() const;
+
+    // Werte als JSON (HTTP-API und MQTT)
+    void buildStatus(JsonDocument& doc) const;
+    void buildSettings(JsonDocument& doc) const;
 
 private:
     struct ChannelState { bool on; uint8_t level; uint32_t color; };

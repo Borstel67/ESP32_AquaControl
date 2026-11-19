@@ -14,8 +14,8 @@
 namespace aqua {
 
 constexpr uint8_t  kChannels   = 4;     // ledanzcol: LEDs reihum auf die Kanäle verteilt
-constexpr uint16_t kMaxLeds    = 300;
-constexpr uint8_t  kMoonRanges = 3;
+constexpr uint16_t kMaxLeds    = 400;
+constexpr uint8_t  kMoonRanges = 5;
 constexpr uint8_t  kRampStages = 3;
 constexpr uint8_t  kPeriods    = 2;
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Sketch für ESP32_Aqua_LEDStrip (AP + STA + Captive Portal + OTA)
+// Sketch für ESP32_AquaControl (AP + STA + Captive Portal + OTA)
 // Ablauf:
 //  - Start: versucht STA-Verbindung mit gespeicherten Zugangsdaten
 //  - Fallback: öffnet Captive-Portal (AP+DNS) zur Neukonfiguration
@@ -9,6 +9,7 @@
 //  - OTA über ElegantOTA (/update) und ArduinoOTA im AP- und STA-Modus verfügbar
 //  - Aquarium-LED-Steuerung (WS2812B, 4 Kanäle, Mond, DS18B20) läuft unabhängig vom WLAN;
 //    Bedienung im STA-Modus über /led und /config
+//  - Wasserqualität: ADS1115 (I2C) mit pH (DFRobot Gravity, AIN0) und TDS (CQRobot, AIN1); Seite /water
 
 #include <Arduino.h>
 // Nur für die Bibliothekserkennung von vMicro/Arduino: ElegantOTA, AsyncTCP und ESPAsyncWebServer
@@ -24,10 +25,17 @@
 #define ELEGANTOTA_USE_ASYNC_WEBSERVER 1
 #endif
 #include <ElegantOTA.h>
+#include <Wire.h>
+#include <SPI.h>           // U8g2 (U8x8lib.cpp)
+#include <U8g2lib.h>      // vor src/AquaDisplay.h, damit vMicro den Bibliothekspfad kennt
 #include <src/ESPWiFiManagerAP.h>
 #include <src/ESPWiFiManagerSTA.h>
 #include <src/ESPWiFiManagerCommon.h>
 #include <src/AquaController.h>
+#include <src/AquaWater.h>
+#include <src/AquaDisplay.h>
+#include <PubSubClient.h>          // vor src/AquaMqtt.h, damit vMicro den Bibliothekspfad kennt
+#include <src/AquaMqtt.h>
 // Nur für die Bibliothekserkennung von vMicro/Arduino: vMicro wertet die Includes unter src/ nicht aus,
 // daher hier jede Bibliothek einbinden, die in src/ benutzt wird
 #include <LittleFS.h>
@@ -62,18 +70,39 @@
 #define ONEWIRE_PIN 4      // DS18B20 (4,7 kΩ Pull-up nach 3,3 V)
 #endif
 
+#ifndef I2C_SDA_PIN
+#define I2C_SDA_PIN 8      // ADS1115 (Wasserqualität); ESP32-S3: Standard-I2C-Pins des DevKitC-1
+#endif
+
+#ifndef I2C_SCL_PIN
+#define I2C_SCL_PIN 9
+#endif
+
+#ifndef ADS1115_ADDR
+#define ADS1115_ADDR 0x48  // ADDR-Pin an GND
+#endif
+
+#ifndef OLED_ADDR
+#define OLED_ADDR 0x3C   // OLED 1,5" 128x128 (SH1107) am selben I2C-Bus
+#endif
+
 // ----- Timing / Netzwerk -----
 static const char*    DEFAULT_HOSTNAME  = "ESPDevice";  // wird durch "hostname" aus der Config überschrieben
 static const uint32_t SHORT_PRESS_MS    = 700;          // Tastendauer für Portal-Trigger
 static const uint32_t LOST_PORTAL_MS    = 60000;        // Portal öffnen, wenn so lange keine Verbindung
 static const uint32_t PORTAL_TIMEOUT_S  = 300;          // Portal schließen nach Inaktivität (nur mit Credentials)
 static const uint16_t OTA_PORT          = 3232;
+static const uint32_t OTA_VERIFY_TIMEOUT_MS = 300000;   // neue Firmware muss sich binnen 5 min bewähren, sonst Rollback
+static const uint32_t OTA_VERIFY_UPTIME_MS  = 60000;    // Mindestlaufzeit ohne Absturz vor der Bestätigung
 
 // ----- Manager-Instanzen -----
 // Der AP-Manager wertet beim Boot immer einen Taster aus (Default GPIO0 = BOOT-Taste)
 ESPWiFiManagerAP  wifiManagerAP(LED_PIN, BTN_PIN >= 0 ? BTN_PIN : 0);
 ESPWiFiManagerSTA wifiManagerSTA;
 aqua::Controller  aquaCtl(LED_STRIP_PIN, ONEWIRE_PIN);
+aqua::Water       aquaWater(I2C_SDA_PIN, I2C_SCL_PIN, ADS1115_ADDR);
+aqua::Display     aquaDisplay(I2C_SDA_PIN, I2C_SCL_PIN, OLED_ADDR);
+aqua::Mqtt        aquaMqtt(aquaCtl, aquaWater);
 
 // ----- Zustände -----
 bool     otaReady      = false;
@@ -125,9 +154,31 @@ void setup() {
 
 	Serial.println("ESPWiFiManagerAP v" AWM_VERSION);
 
+	// OTA-Rollback: erster Start nach einem Update → Frist starten; Hinweis, falls zuvor zurückgerollt wurde
+	otaRollbackReportLastBoot();
+	otaRollbackBegin(OTA_VERIFY_TIMEOUT_MS);
+	// Abgebrochener/fehlerhafter Web-Upload: Update verwerfen, bisherige Firmware bleibt aktiv
+	ElegantOTA.onEnd([](bool success) {
+		if (success) return;
+		Serial.println("[OTA] Update fehlgeschlagen → verworfen, bisherige Firmware bleibt aktiv");
+		if (Update.isRunning()) Update.abort();
+	});
+
 	// LED-Steuerung vor dem (blockierenden) WLAN-Aufbau starten; Routen vor startSTA() registrieren
 	aquaCtl.begin();
-	wifiManagerSTA.setExtraRoutes([](AsyncWebServer& s) { aquaCtl.registerRoutes(s); });
+	aquaWater.begin();      // startet auch den I2C-Bus
+	aquaDisplay.begin();
+	aquaMqtt.begin();
+	wifiManagerSTA.setExtraRoutes([](AsyncWebServer& s) {
+		aquaCtl.registerRoutes(s);
+		aquaWater.registerRoutes(s);
+		aquaMqtt.registerRoutes(s);
+	});
+	// Werkseinstellung (POST /factory): LED-/Uhr-/Standort-Einstellungen, Kalibrierung ("aqua") und MQTT löschen
+	wifiManagerSTA.setFactoryResetHook([]() {
+		eraseNvsNamespace("aqua");
+		eraseNvsNamespace("mqtt");
+	});
 
 	wifiManagerAP.setHostname(DEFAULT_HOSTNAME);
 	wifiManagerAP.setFallbackPolicy(ESPWiFiManagerAP::FallbackPolicy::ON_FAIL);
@@ -163,8 +214,23 @@ void loop() {
 	const bool portal    = wifiManagerAP.isPortalActive();
 	const bool connected = wifiManagerAP.isConnected();
 
+	// Neue Firmware bestätigen, sobald sie stabil läuft und (falls WLAN konfiguriert) wieder
+	// im Netz erreichbar ist – sonst Rollback nach OTA_VERIFY_TIMEOUT_MS
+	if (otaRollbackPending()) {
+		const bool healthy = !wifiManagerAP.hasCredentials() || (connected && wifiManagerSTA.isRunning());
+		otaRollbackLoop(healthy, OTA_VERIFY_UPTIME_MS);
+	}
+
 	// LED-Steuerung, Uhr, Sonne/Mond, Temperatur (auch ohne WLAN / im Portal)
 	aquaCtl.loop(connected);
+	// Wasserqualität (ADS1115: pH, TDS), optional temperaturkompensiert (Wassertemperatur vom DS18B20)
+	aquaWater.loop(aquaCtl.temperature());
+	// OLED: Dashboard-Werte
+	float ph, tds;
+	aquaWater.values(ph, tds);
+	aquaDisplay.loop(aquaCtl.overview(), ph, tds, connected);
+	// MQTT: veröffentlicht alle Werte (nur mit Konfiguration unter /api/aqua/mqtt)
+	aquaMqtt.loop(connected);
 
 #if (BTN_PIN >= 0)
 	// Tastendruck ≥ SHORT_PRESS_MS öffnet Portal (Re-Provisioning)

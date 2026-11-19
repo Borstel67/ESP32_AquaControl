@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Helles Theme wie die Wärmepumpen-App (Hintergrund #f3f6fb); dunkel siehe values-night -->
+    <style name="Theme.AquaControl" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F3F6FB</item>
+        <item name="android:statusBarColor">#F3F6FB</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+    </style>
+</resources>

@@ -18,3 +18,7 @@ __vm/
 
 # Alter, nicht mehr genutzter Code
 alt/
+
+# Generierte Artefakte
+graphify-out/
+apk/

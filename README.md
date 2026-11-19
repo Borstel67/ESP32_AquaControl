@@ -1,4 +1,4 @@
-# ESP32_Aqua_LEDStrip
+﻿# ESP32_AquaControl
 
 Umfassender WLAN-Manager für ESP32 mit Captive-Portal, OTA (Firmware + LittleFS), Web-UI und automatischer Fallback-Logik. Provisionierung erfolgt wahlweise per SoftAP/Captive-Portal oder über die STA-UI, Daten liegen in LittleFS. OTA wird über ElegantOTA bereitgestellt.
 
@@ -23,24 +23,46 @@ Läuft unabhängig vom WLAN (auch im Portal-Modus); bedient wird sie im STA-Modu
 - **Hardware:** WS2812B-Datenleitung an `LED_STRIP_PIN` (Standard GPIO16), DS18B20 an `ONEWIRE_PIN` (Standard GPIO4, 4,7 kΩ Pull-up nach 3,3 V).
 - **4 Farbkanäle:** LEDs reihum verteilt (Kanal 1 = LED 1, 5, 9, …). Je Kanal Farbe EIN/AUS, Betriebsart UHR/EIN/AUS und zwei Schaltzeiträume (gleiche EIN-/AUS-Zeit = deaktiviert, über Mitternacht möglich).
 - **Sonnenauf-/-untergang (Dimmung):** ab EIN-Zeit 3 Stufen hoch, vor AUS-Zeit 3 Stufen herunter; Dauer je Stufe und Helligkeit je Stufe (%) einstellbar, 0 min = hart schalten.
-- **Anzahl LEDs:** 1–300.
-- **Mondbeleuchtung:** LED-Bereiche `von-bis;einzeln;von-bis` (max. 3), eigene Farbe. AUTO: an, wenn alle Kanäle außerhalb ihrer Schaltzeiten sind; Helligkeit = 2 × Tage bis/seit Neumond (/256). EIN/AUS: alle Kanäle aus, Mond an (Vollmond-Helligkeit) bzw. aus.
+- **Anzahl LEDs:** 1–400.
+- **Mondbeleuchtung:** LED-Bereiche `von-bis;einzeln;von-bis` (max. 5), eigene Farbe. AUTO: an, wenn alle Kanäle außerhalb ihrer Schaltzeiten sind; Helligkeit = 2 × Tage bis/seit Neumond (/256). EIN/AUS: alle Kanäle aus, Mond an (Vollmond-Helligkeit) bzw. aus.
 - **Uhr:** NTP (Server einstellbar, leer = `de.pool.ntp.org`), Zeitzone GMT-12 … GMT+13, EU-Sommerzeit abschaltbar, manuelle Zeiteinstellung, NTP-Status.
 - **Sonne/Mond:** Sonnenaufgang/-untergang und Mondalter aus Breiten-/Längengrad (Bibliothek *sunMoon*).
 - **Temperatur:** DS18B20, Anzeige jede Sekunde; `999.99` bei Sensorfehler.
+- **Wasserqualität:** ADS1115 (I2C, GPIO8/9): AIN0 pH (DFRobot Gravity), AIN1 TDS (CQRobot); Seite `/water` mit Kalibrierung.
 - **API:** `GET /api/aqua/status`, `GET/POST /api/aqua/settings` (JSON, Teil-Updates; zusätzlich `ntp` und `setTime`).
+- **Android-App:** `android/` (Kotlin + Compose). In Android Studio öffnen oder per Kommandozeile bauen (`cd android`, `gradlew assembleDebug`, JDK 17+ über `JAVA_HOME`; APK unter `app/build/outputs/apk/debug/`), in den App-Einstellungen die IP des ESP32 eintragen. Zeigt Dashboard (Temp, pH, TDS, Kanäle, Mond) und stellt Kanal-/Mond-Betriebsart, Farben und Mond-Bereiche ein.
 - **Bibliotheken:** Adafruit NeoPixel, OneWire, DallasTemperature, sunMoon, Time (TimeLib).
 - **Speicher:** Einstellungen als JSON in NVS (Namespace `aqua`), NTP-Server als `ntp1` in der WLAN-Config.
 
+## MQTT
+Veröffentlicht alle Werte als einzelne Topics (Bibliothek *PubSubClient* erforderlich). Konfiguration über die Seite `/mqtt` (`data/mqtt.html`, Menü „📡 MQTT“) oder per API, gespeichert in NVS (Namespace `mqtt`):
+
+```
+curl -X POST http://<ip>/api/aqua/mqtt -H "Content-Type: application/json" \
+  -d '{"enabled":true,"host":"192.168.1.10","port":1883,"user":"","pass":"","base":"aquacontrol","interval":10}'
+```
+`GET /api/aqua/mqtt` liefert Konfiguration (ohne Passwort), Verbindungsstatus und letzten Fehler.
+
+| Topic | Inhalt |
+|---|---|
+| `<base>/online` | `1` (retained); Last Will `0` |
+| `<base>/status/…` | Uhrzeit, NTP, Sonne/Mond, `temp`, `ch/0..3/{on,level,color}` (alle `interval` s) |
+| `<base>/water/…` | `ph`, `tds`, `ec`, `temp`, `phMv`, `tdsMv`, `ads`, `cal/…` (alle `interval` s) |
+| `<base>/settings/…` | komplette Konfiguration (retained, beim Verbinden und alle 60 s) |
+
+Nicht verfügbare Werte (Sensorfehler) werden mit leerem Payload gesendet. Die Einstellungen sind nur lesend; geändert wird weiterhin über die Web-UI/HTTP-API.
+
 ## Projektstruktur (relevant)
-- `ESP32_Aqua_LEDStrip.ino` — Beispiel-Sketch (Startlogik, LED/Button, OTA-Init).
+- `ESP32_AquaControl.ino` — Beispiel-Sketch (Startlogik, LED/Button, OTA-Init).
 - `src/ESPWiFiManagerAP.*` — AP/Captive-Portal, Scan, OTA, mDNS, Fallback.
 - `src/ESPWiFiManagerSTA.*` — STA-Server, `/api/sta/config`, optional Captive-Redirect.
 - `src/ESPWiFiManagerCommon.*` — Utilities (Credentials, `config.json`, NTP, File-Streaming).
 - `src/AquaConfig.*` — LED-/Uhr-Konfiguration (Datenmodell, JSON, NVS).
 - `src/AquaClock.*` — Zeitzone, EU-Sommerzeit, NTP-Status, manuelle Zeit.
 - `src/AquaController.*` — LED-Rendering, Dimm-Rampe, Mond/Sonne, DS18B20, HTTP-API.
-- `data/led.html`, `data/config.html` — LED-Steuerung und Konfiguration (STA).
+- `src/AquaWater.*` — ADS1115, pH/TDS, Kalibrierung, `/water`-API.
+- `src/AquaMqtt.*` — MQTT-Client, veröffentlicht alle Werte, `/api/aqua/mqtt`.
+- `data/led.html`, `data/water.html`, `data/config.html` — LED-Steuerung, Wasserqualität und Konfiguration (STA).
 - `data/` — Web-Assets (LittleFS-Inhalt: `indexAP.html`, `indexSTA.html`, `settings.html`, `success.html`, `error.html`, `WifiManager.css`).
 - `LittleFS.ps1`, `LittleFS-OTA.ps1`, `App-OTA.ps1` — Flash/OTA-Skripte.
 
@@ -75,7 +97,7 @@ Läuft unabhängig vom WLAN (auch im Portal-Modus); bedient wird sie im STA-Modu
 
 ## HTTP-Routen (Auszug)
 - AP: `/`, `/settings`, `/scan`, `/scan.json`, `/save` (POST), `/erase` (POST), `/WifiManager.css`
-- STA: `/`, `/settings`, `/api/sta/config` (GET/POST), `/erase` (POST), `/WifiManager.css`, `/led`, `/config`, `/api/aqua/status`, `/api/aqua/settings` (GET/POST)
+- STA: `/`, `/settings`, `/api/sta/config` (GET/POST), `/erase` (POST), `/WifiManager.css`, `/led`, `/water`, `/config`, `/api/aqua/status`, `/api/aqua/settings` (GET/POST), `/api/aqua/water` (GET), `/api/aqua/water/cal` (POST)
 - Captive-Redirects: `/generate_204`, `/gen_204`, `/hotspot-detect.html`, `/connecttest.txt`, `/ncsi.txt`, `/fwlink`
 - OTA: `/update` (ElegantOTA)
 
@@ -86,6 +108,8 @@ Läuft unabhängig vom WLAN (auch im Portal-Modus); bedient wird sie im STA-Modu
 ## Hardware-Annahmen
 - WS2812B-Daten: `LED_STRIP_PIN` (Standard GPIO16).
 - DS18B20: `ONEWIRE_PIN` (Standard GPIO4, 4,7 kΩ Pull-up nach 3,3 V).
+- ADS1115: `I2C_SDA_PIN` / `I2C_SCL_PIN` (Standard GPIO8 / GPIO9), Adresse `ADS1115_ADDR` (0x48); AIN0 = pH, AIN1 = TDS.
+- OLED M242-12864-4-V2.0 (SSD1309, U8g2): I2C am selben Bus, Adresse `OLED_ADDR` (0x3C); zeigt Uhrzeit, Temperatur, pH, TDS, Kanäle.
 - LED: `LED_PIN` (Standard GPIO2).
 - Taster: `BTN_PIN` (Standard GPIO0, LOW-aktiv, -1 zum Deaktivieren).
 - Vollständige Pinbelegung, Anschlussplan, Stromversorgung und Stückliste: [docs/DOKUMENTATION.md](docs/DOKUMENTATION.md#hardware--verdrahtung)

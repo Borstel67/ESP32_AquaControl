@@ -8,6 +8,8 @@
 #include <Preferences.h>
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
+#include <esp_timer.h>
+#include <Update.h>
 #include <time.h>
 #include <esp_sntp.h>
 
@@ -39,6 +41,12 @@ bool saveConfigJson(const String& jsonText) {
 void eraseConfigJson() {
     Preferences p;
     if (p.begin(kNvsNs, false)) { p.remove(kNvsKey); p.end(); }
+}
+
+void eraseNvsNamespace(const char* ns) {
+    if (!ns || !*ns) return;
+    Preferences p;
+    if (p.begin(ns, false)) { p.clear(); p.end(); }
 }
 
 bool loadConfigDoc(JsonDocument& doc) {
@@ -76,6 +84,8 @@ void applyStaConfigFromWifiJson() {
     if (dhcp) {
         WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
     } else if (ip != IPAddress(0, 0, 0, 0)) {
+        // Ohne DNS-Server lassen sich NTP-Servernamen nicht auflösen → Gateway (Router) als Standard
+        if (dns1 == IPAddress(0, 0, 0, 0)) dns1 = gw;
         if (!WiFi.config(ip, gw, sn, dns1, dns2))
             WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE); // Fallback DHCP
     }
@@ -185,7 +195,10 @@ bool ensureArduinoOta(const String& hostname, uint16_t port, const String& passw
 
     ArduinoOTA.onStart([]()  { AWM_LOGI("[OTA] Start"); });
     ArduinoOTA.onEnd([]()    { AWM_LOGI("[OTA] Ende"); });
-    ArduinoOTA.onError([](ota_error_t e) { AWM_LOGE("[OTA] Fehler %u", (unsigned)e); });
+    ArduinoOTA.onError([](ota_error_t e) {
+        AWM_LOGE("[OTA] Fehler %u → Update verworfen, bisherige Firmware bleibt aktiv", (unsigned)e);
+        if (Update.isRunning()) Update.abort();
+    });
 
     ArduinoOTA.begin();
     _otaStarted = true;
@@ -195,6 +208,79 @@ bool ensureArduinoOta(const String& hostname, uint16_t port, const String& passw
 
 void handleArduinoOta() {
     if (_otaStarted) ArduinoOTA.handle();
+}
+
+// ── OTA-Rollback ──────────────────────────────────────────────────────────────
+// Fehler während des Uploads: Update.end() setzt die Boot-Partition nur bei Erfolg,
+// die alte Firmware bleibt also aktiv (zusätzlich Update.abort() in den Fehler-Callbacks).
+// Fehler nach dem Upload (neue Firmware stürzt ab/hängt/kommt nicht ins WLAN):
+// Der Core bestätigt neue Images normalerweise sofort beim Start. verifyRollbackLater()
+// verschiebt das; das Image bleibt im Zustand PENDING_VERIFY, bis otaRollbackLoop() es
+// bestätigt. Jeder Neustart vorher (Absturz, Watchdog, Brownout) → der Bootloader startet
+// automatisch wieder die vorherige Version. Zusätzlich löst ein esp_timer nach Ablauf der
+// Frist den Rollback aus (greift auch, wenn loop() hängt).
+
+#ifdef CONFIG_APP_ROLLBACK_ENABLE
+extern "C" bool verifyRollbackLater() { return true; }   // überschreibt schwache Core-Funktion
+#endif
+
+static bool              _otaPending       = false;
+static esp_timer_handle_t _otaRollbackTimer = nullptr;
+
+static void otaRollbackNow(void*) {
+#ifdef CONFIG_APP_ROLLBACK_ENABLE
+    AWM_LOGE("[OTA] Neue Firmware nicht bestätigt → Rollback auf vorherige Version");
+    esp_ota_mark_app_invalid_rollback_and_reboot();   // kehrt nur zurück, wenn kein gültiges Alt-Image existiert
+    AWM_LOGE("[OTA] Rollback nicht möglich (kein gültiges vorheriges Image)");
+#endif
+}
+
+void otaRollbackBegin(uint32_t timeoutMs) {
+#ifdef CONFIG_APP_ROLLBACK_ENABLE
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_ota_img_states_t state;
+    if (esp_ota_get_state_partition(running, &state) != ESP_OK || state != ESP_OTA_IMG_PENDING_VERIFY) return;
+
+    _otaPending = true;
+    AWM_LOGW("[OTA] Neue Firmware in '%s' wird geprüft – Rollback, falls nicht innerhalb %lu s bestätigt",
+             running->label, (unsigned long)(timeoutMs / 1000));
+    esp_timer_create_args_t args = {};
+    args.callback        = &otaRollbackNow;
+    args.dispatch_method = ESP_TIMER_TASK;
+    args.name            = "otaRollback";
+    if (esp_timer_create(&args, &_otaRollbackTimer) == ESP_OK)
+        esp_timer_start_once(_otaRollbackTimer, (uint64_t)timeoutMs * 1000ULL);
+#else
+    (void)timeoutMs;
+    AWM_LOGW("[OTA] Rollback im Core deaktiviert (CONFIG_APP_ROLLBACK_ENABLE fehlt)");
+#endif
+}
+
+void otaRollbackLoop(bool healthy, uint32_t minUptimeMs) {
+#ifdef CONFIG_APP_ROLLBACK_ENABLE
+    if (!_otaPending || !healthy || millis() < minUptimeMs) return;
+    if (_otaRollbackTimer) {
+        esp_timer_stop(_otaRollbackTimer);
+        esp_timer_delete(_otaRollbackTimer);
+        _otaRollbackTimer = nullptr;
+    }
+    if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK)
+        AWM_LOGI("[OTA] Neue Firmware bestätigt, Rollback abgebrochen");
+    else
+        AWM_LOGE("[OTA] Bestätigen der Firmware fehlgeschlagen");
+    _otaPending = false;
+#else
+    (void)healthy; (void)minUptimeMs;
+#endif
+}
+
+bool otaRollbackPending() { return _otaPending; }
+
+void otaRollbackReportLastBoot() {
+#ifdef CONFIG_APP_ROLLBACK_ENABLE
+    const esp_partition_t* last = esp_ota_get_last_invalid_partition();
+    if (last) AWM_LOGW("[OTA] Hinweis: Firmware in '%s' war fehlerhaft, es läuft die vorherige Version", last->label);
+#endif
 }
 
 // ── Partition-Check ───────────────────────────────────────────────────────────

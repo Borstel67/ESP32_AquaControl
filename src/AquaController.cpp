@@ -139,6 +139,23 @@ Controller::State Controller::getState() const {
     return s;
 }
 
+Controller::Overview Controller::overview() const {
+    const State s = getState();
+    Overview o = {};
+    o.timeValid = _clock.valid();
+    if (o.timeValid) {
+        const time_t local = _clock.local();
+        struct tm t;
+        gmtime_r(&local, &t);
+        o.hour   = t.tm_hour;
+        o.minute = t.tm_min;
+    }
+    o.temp    = s.temp;
+    o.moonLit = s.moonLit;
+    for (uint8_t i = 0; i < kChannels; ++i) o.level[i] = s.ch[i].level;
+    return o;
+}
+
 // ── Licht ─────────────────────────────────────────────────────────────────────
 
 // Helligkeit (%) eines Kanals im UHR-Modus; 0 = außerhalb aller Zeiträume.
@@ -304,6 +321,10 @@ void Controller::registerRoutes(AsyncWebServer& server) {
         if (!serveFileFromLittleFS(r, "/led.html", "text/html"))
             r->send(500, "text/html", "<h1>led.html nicht gefunden</h1>");
     });
+    server.on("/dashboard", HTTP_GET, [](AsyncWebServerRequest* r) {
+        if (!serveFileFromLittleFS(r, "/dashboard.html", "text/html"))
+            r->send(500, "text/html", "<h1>dashboard.html nicht gefunden</h1>");
+    });
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest* r) {
         if (!serveFileFromLittleFS(r, "/config.html", "text/html"))
             r->send(500, "text/html", "<h1>config.html nicht gefunden</h1>");
@@ -319,13 +340,19 @@ void Controller::registerRoutes(AsyncWebServer& server) {
 
 // GET /api/aqua/status: Live-Werte für die LED-Seite (Abfrage jede Sekunde)
 void Controller::handleStatus(AsyncWebServerRequest* r) {
+    JsonDocument doc;
+    buildStatus(doc);
+    sendJson(r, 200, doc);
+}
+
+// Live-Werte als JSON (HTTP-Status und MQTT)
+void Controller::buildStatus(JsonDocument& doc) const {
     const State  s     = getState();
     const bool   valid = _clock.valid();
     const time_t utc   = _clock.utc();
     const time_t local = _clock.local();
 
-    JsonDocument doc;
-    doc["valid"]     = valid;
+    doc["valid"]    = valid;
     doc["date"]      = valid ? fmtLocal(local, "%d.%m.%Y") : String("--.--.----");
     doc["time"]      = valid ? fmtLocal(local, "%H:%M:%S") : String("--:--:--");
     doc["dstActive"] = valid && _clock.isDst(utc) && getConfig().dst;
@@ -349,7 +376,11 @@ void Controller::handleStatus(AsyncWebServerRequest* r) {
         o["level"] = c.level;
         o["color"] = colorToText(c.color);
     }
-    sendJson(r, 200, doc);
+}
+
+// Konfiguration (ohne NTP-Server) als JSON für MQTT
+void Controller::buildSettings(JsonDocument& doc) const {
+    toJson(getConfig(), doc.to<JsonObject>());
 }
 
 // GET /api/aqua/settings: komplette Konfiguration inkl. NTP-Server und aktueller Lokalzeit

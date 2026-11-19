@@ -23,6 +23,7 @@
                 </div>
             </div>
             <div class="actions">
+                <a class="gear" href="/water" title="Wasserqualität" aria-label="Wasserqualität">💧</a>
                 <a class="gear" href="/config" title="Konfiguration" aria-label="Konfiguration">⚙️</a>
             </div>
         </div>
@@ -50,8 +51,8 @@
                     <h2>LED-Strip</h2>
                     <div class="row">
                         <label for="leds">Anzahl LEDs</label>
-                        <input id="leds" class="input num" type="number" min="1" max="300" required />
-                        <span class="sep">max. 300</span>
+                        <input id="leds" class="input num" type="number" min="1" max="400" required />
+                        <span class="sep">max. 400</span>
                     </div>
                     <p class="hint">Die LEDs werden reihum auf die 4 Kanäle verteilt: Kanal 1 = LED 1, 5, 9, … · Kanal 2 = LED 2, 6, 10, … usw.</p>
                 </section>
@@ -78,12 +79,12 @@
                 <section class="sec">
                     <h2>Mondbeleuchtung <span class="swatch" id="moon-live" title="aktuell"></span></h2>
                     <div class="row">
-                        <label for="moon-mode">Betriebsart</label>
-                        <select id="moon-mode" class="input">
-                            <option value="0">AUTO</option>
-                            <option value="1">EIN</option>
-                            <option value="2">AUS</option>
-                        </select>
+                        <label>Betriebsart</label>
+                        <div id="moon-mode" data-mode data-value="0" role="group" aria-label="Betriebsart" style="display:flex;gap:6px">
+                            <button type="button" class="btn" data-v="0">AUTO</button>
+                            <button type="button" class="btn" data-v="1">EIN</button>
+                            <button type="button" class="btn" data-v="2">AUS</button>
+                        </div>
                         <input id="moon-color" type="color" aria-label="Mondfarbe" />
                     </div>
                     <div class="row">
@@ -91,7 +92,7 @@
                         <input id="moon-ranges" class="input grow" type="text" placeholder="37-48;67-78;107-118" />
                     </div>
                     <p class="hint">
-                        Format <code>von-bis;einzeln;von-bis</code>, max. 3 Einträge.<br>
+                        Format <code>von-bis;einzeln;von-bis</code>, max. 5 Einträge.<br>
                         AUTO: Mond an, wenn alle Kanäle außerhalb ihrer Schaltzeiten sind; Helligkeit nach Mondphase.<br>
                         EIN / AUS: alle 4 Kanäle sind aus, der Mond leuchtet (feste Vollmond-Helligkeit) bzw. ist aus.
                     </p>
@@ -112,11 +113,11 @@
             <h2><span data-name></span> <span class="swatch" data-live title="aktuell"></span></h2>
             <div class="row">
                 <label>Betriebsart</label>
-                <select class="input" data-mode aria-label="Betriebsart">
-                    <option value="0">UHR</option>
-                    <option value="1">EIN</option>
-                    <option value="2">AUS</option>
-                </select>
+                <div data-mode data-value="0" role="group" aria-label="Betriebsart" style="display:flex;gap:6px">
+                    <button type="button" class="btn" data-v="0">UHR</button>
+                    <button type="button" class="btn" data-v="1">EIN</button>
+                    <button type="button" class="btn" data-v="2">AUS</button>
+                </div>
             </div>
             <div class="row">
                 <label>Farbe EIN</label>
@@ -160,6 +161,23 @@
                 chEls.push(sec);
             }
 
+            // ── Betriebsart-Buttons (UHR/EIN/AUS) ──
+            const setMode = (s, v) => {
+                const g = s.querySelector("[data-mode]");
+                g.dataset.value = v;
+                g.querySelectorAll("button").forEach(b => {
+                    const on = +b.dataset.v === +v;
+                    b.classList.toggle("primary", on);
+                    b.setAttribute("aria-pressed", on);
+                });
+            };
+            const moonRow = $("moon-mode").parentElement;
+            [...chEls, moonRow].forEach(s => {
+                s.querySelectorAll("[data-mode] button").forEach(b =>
+                    b.addEventListener("click", () => setMode(s, b.dataset.v)));
+                setMode(s, 0);
+            });
+
             // ── Einstellungen laden / speichern ──
             const msg = $("msg");
             const setMsg = (text, ok) => { msg.className = "hint " + (ok ? "ok" : "err"); msg.textContent = text; };
@@ -170,14 +188,14 @@
                 c.ramp.lv.forEach((v, i) => $("ramp-" + i).value = v);
                 c.ch.forEach((ch, i) => {
                     const s = chEls[i];
-                    s.querySelector("[data-mode]").value = ch.mode;
+                    setMode(s, ch.mode);
                     s.querySelector("[data-on]").value = ch.on;
                     s.querySelector("[data-off]").value = ch.off;
                     s.querySelectorAll("input[type=time]").forEach(inp => {
                         inp.value = ch.p[+inp.dataset.p][inp.dataset.k];
                     });
                 });
-                $("moon-mode").value = c.moon.mode;
+                setMode(moonRow, c.moon.mode);
                 $("moon-color").value = c.moon.color;
                 $("moon-ranges").value = c.moon.ranges;
             };
@@ -189,13 +207,13 @@
                     const p = [{}, {}];
                     s.querySelectorAll("input[type=time]").forEach(inp => p[+inp.dataset.p][inp.dataset.k] = inp.value || "00:00");
                     return {
-                        mode: +s.querySelector("[data-mode]").value,
+                        mode: +s.querySelector("[data-mode]").dataset.value,
                         on: s.querySelector("[data-on]").value,
                         off: s.querySelector("[data-off]").value,
                         p
                     };
                 }),
-                moon: { mode: +$("moon-mode").value, color: $("moon-color").value, ranges: $("moon-ranges").value.trim() }
+                moon: { mode: +$("moon-mode").dataset.value, color: $("moon-color").value, ranges: $("moon-ranges").value.trim() }
             });
 
             const load = async () => {

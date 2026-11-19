@@ -2,9 +2,9 @@
 # .\Clone-VSProject.ps1 -NewName ComfoAirMQTTESP -CopyVmHeader -PatchSolution
 param(
     [Parameter(Mandatory = $true)] [string]$NewName,
-    [string]$SourceName = "ESP32_Aqua_LEDStrip",
+    [string]$SourceName = "ESP32_AquaControl",
     [string]$Root       = (Get-Location).Path,
-    [switch]$CopyVmHeader,      # kopiert __vm\.ESP32_Aqua_LEDStrip.vsarduino.h
+    [switch]$CopyVmHeader,      # kopiert __vm\.ESP32_AquaControl.vsarduino.h
     [switch]$PatchSolution      # ersetzt Namen/Pfade in erster gefundenen .sln
 )
 

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <title>Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="WifiManager.css">
+    <style>
+        .spark { display: block; width: 100%; height: 34px; margin-top: 6px; }
+        .spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+        .spark text { fill: var(--muted); font-size: 9px; }
+        .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); margin-right: 6px; }
+        .dot.on { background: var(--ok); }
+    </style>
+</head>
+<body>
+    <div class="app wide">
+        <div class="header">
+            <div class="title">
+                <div class="logo" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="wifi-icon" aria-hidden="true">
+                        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+                    </svg>
+                </div>
+                <div>
+                    <h1>Dashboard</h1>
+                    <div class="hint" style="margin:0"><span id="st-date">--.--.----</span> · <span id="st-time">--:--:--</span></div>
+                </div>
+            </div>
+            <div class="actions">
+                <a class="gear" href="/led" title="LED-Steuerung" aria-label="LED-Steuerung">💡</a>
+                <a class="gear" href="/water" title="Wasserqualität" aria-label="Wasserqualität">💧</a>
+                <a class="gear" href="/config" title="Konfiguration" aria-label="Konfiguration">⚙️</a>
+            </div>
+        </div>
+        <nav class="pagenav" aria-label="Navigation">
+            <a class="btn" href="/">🏠 Startseite</a>
+        </nav>
+
+        <div class="card" id="card-meas">
+            <section class="sec">
+                <h2>Messwerte <span class="hint" style="margin:0" id="hist-note">(Verlauf: letzte 5 min)</span></h2>
+                <div class="tiles">
+                    <div class="tile"><div class="k">Wassertemperatur</div><div class="v" id="v-temp">–</div><div class="s">DS18B20</div><svg class="spark" id="sp-temp" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+                    <div class="tile"><div class="k">pH-Wert</div><div class="v" id="v-ph">–</div><div class="s" id="s-ph">DFRobot Gravity</div><svg class="spark" id="sp-ph" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+                    <div class="tile"><div class="k">TDS</div><div class="v" id="v-tds">–</div><div class="s" id="s-tds">CQRobot</div><svg class="spark" id="sp-tds" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+                    <div class="tile"><div class="k">Leitwert</div><div class="v" id="v-ec">–</div><div class="s">TDS × 2</div><svg class="spark" id="sp-ec" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+                </div>
+            </section>
+        </div>
+
+        <div class="card" id="card-stat">
+            <section class="sec">
+                <h2>Status</h2>
+                <div class="tiles">
+                    <div class="tile"><div class="k">Uhr</div><div class="v" id="s-clock">–</div><div class="s" id="s-ntp"></div></div>
+                    <div class="tile"><div class="k">Sonne</div><div class="v"><span id="s-rise">--:--</span> – <span id="s-set">--:--</span></div><div class="s">Aufgang – Untergang</div></div>
+                    <div class="tile"><div class="k">Mond</div><div class="v" id="s-moon">–</div><div class="s" id="s-moon2"></div></div>
+                    <div class="tile"><div class="k">Sensoren</div><div class="v"><span class="dot" id="d-ads"></span><span id="s-ads">–</span></div><div class="s" id="s-ds"></div></div>
+                </div>
+                <div class="chips" id="chips"></div>
+            </section>
+        </div>
+
+        <footer class="copyright">© 2026 R.Wisser · <span id="ver"></span></footer>
+    </div>
+
+    <script>
+        (function () {
+            const VERSION = "2.1.0";
+            const $ = (id) => document.getElementById(id);
+            $("ver").textContent = "v" + VERSION;
+
+            const POLL_MS = 2000, MAX_POINTS = 150;   // 150 × 2 s = 5 min
+            const hist = { temp: [], ph: [], tds: [], ec: [] };
+
+            const fmt = (v, d, unit) => v == null ? "–" : v.toFixed(d) + (unit ? " " + unit : "");
+
+            // Sparkline: Pfad über min…max der letzten Werte, Beschriftung min/max
+            const spark = (id, arr, d) => {
+                const svg = $(id);
+                const pts = arr.filter(v => v != null);
+                if (pts.length < 2) { svg.textContent = ""; return; }
+                let lo = Math.min(...pts), hi = Math.max(...pts);
+                if (hi - lo < 1e-9) { lo -= 0.5; hi += 0.5; }
+                const n = arr.length;
+                let path = "", pen = false;
+                arr.forEach((v, i) => {
+                    if (v == null) { pen = false; return; }
+                    const x = n > 1 ? i / (MAX_POINTS - 1) * 100 : 0;
+                    const y = 30 - (v - lo) / (hi - lo) * 26;
+                    path += (pen ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1);
+                    pen = true;
+                });
+                svg.innerHTML = '<path d="' + path + '"/>';
+                svg.setAttribute("aria-label", "Verlauf " + lo.toFixed(d) + " bis " + hi.toFixed(d));
+            };
+
+            const push = (key, v) => {
+                hist[key].push(v);
+                if (hist[key].length > MAX_POINTS) hist[key].shift();
+            };
+
+            const renderChips = (chs, moonLit) => {
+                const box = $("chips");
+                box.textContent = "";
+                chs.forEach((c, i) => {
+                    const chip = document.createElement("span");
+                    chip.className = "chip" + (c.on ? " on" : "");
+                    const sw = document.createElement("span");
+                    sw.className = "swatch";
+                    sw.style.background = c.color;
+                    chip.appendChild(sw);
+                    chip.appendChild(document.createTextNode("K" + (i + 1) + " " + (c.on ? c.level + " %" : "aus")));
+                    box.appendChild(chip);
+                });
+                const m = document.createElement("span");
+                m.className = "chip" + (moonLit ? " on" : "");
+                m.textContent = "🌙 " + (moonLit ? "an" : "aus");
+                box.appendChild(m);
+            };
+
+            let busy = false;
+            const poll = async () => {
+                if (busy) return;
+                busy = true;
+                try {
+                    const [a, w] = await Promise.all([
+                        fetch("/api/aqua/status", { cache: "no-store" }),
+                        fetch("/api/aqua/water", { cache: "no-store" })
+                    ]);
+                    if (!a.ok || !w.ok) throw new Error("HTTP");
+                    const s = await a.json(), q = await w.json();
+
+                    // Kopf + Status
+                    $("st-date").textContent = s.date;
+                    $("st-time").textContent = s.time;
+                    $("s-clock").textContent = s.time;
+                    $("s-ntp").textContent = (s.valid ? (s.dstActive ? "Sommerzeit" : "Normalzeit") : "Uhr nicht gesetzt") + " · NTP: " + s.ntpText;
+                    $("s-rise").textContent = s.sunrise || "--:--";
+                    $("s-set").textContent = s.sunset || "--:--";
+                    $("s-moon").textContent = s.valid ? s.moonAge + " Tage" : "–";
+                    $("s-moon2").textContent = !s.valid ? "Uhr nicht gesetzt" : s.moonLit ? "Helligkeit " + s.moonBright + "/256" : "aus";
+                    renderChips(s.ch, s.moonLit);
+
+                    const tempErr = s.temp >= 999;
+                    const temp = tempErr ? null : s.temp;
+                    $("v-temp").textContent = tempErr ? "Sensorfehler" : fmt(temp, 2, "°C");
+                    $("v-temp").classList.toggle("err", tempErr);
+
+                    // Wasserqualität
+                    $("v-ph").textContent = fmt(q.ph, 2, "");
+                    $("v-ph").classList.toggle("err", q.phEn && (q.ph == null || q.ph < 0 || q.ph > 14));
+                    $("s-ph").textContent = !q.phEn ? "nicht angeschlossen" : !q.ads ? "kein ADS1115" : q.ph == null ? "kein Sensorsignal" : "DFRobot Gravity";
+                    $("v-tds").textContent = fmt(q.tds, 0, "ppm");
+                    $("s-tds").textContent = !q.tdsEn ? "nicht angeschlossen" : !q.ads ? "kein ADS1115" : q.tds == null ? "kein Sensorsignal" : "CQRobot";
+                    $("v-ec").textContent = fmt(q.ec, 0, "µS/cm");
+
+                    $("d-ads").classList.toggle("on", q.ads);
+                    $("s-ads").textContent = q.ads ? "ADS1115 ok" : "ADS1115 fehlt";
+                    $("s-ds").textContent = "DS18B20: " + (tempErr ? "Fehler" : "ok");
+
+                    // Verlauf
+                    push("temp", temp); push("ph", q.ph); push("tds", q.tds); push("ec", q.ec);
+                    spark("sp-temp", hist.temp, 2); spark("sp-ph", hist.ph, 2);
+                    spark("sp-tds", hist.tds, 0); spark("sp-ec", hist.ec, 0);
+
+                    $("card-meas").style.opacity = $("card-stat").style.opacity = "";
+                } catch (e) {
+                    $("card-meas").style.opacity = $("card-stat").style.opacity = "0.5";   // Werte veraltet
+                } finally {
+                    busy = false;
+                }
+            };
+
+            poll();
+            setInterval(poll, POLL_MS);
+        })();
+    </script>
+</body>
+</html>

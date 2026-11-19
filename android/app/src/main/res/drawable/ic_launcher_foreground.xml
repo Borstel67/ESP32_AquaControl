@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aquarium mit LED-Leiste, Lichtkegel, Pflanzen und Fisch (Sicherheitszone 21–87) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Lichtkegel -->
+    <path
+        android:fillColor="#55FFF0A8"
+        android:pathData="M38,35 L70,35 L80,56 L28,56 Z" />
+
+    <!-- Wasser -->
+    <path
+        android:fillColor="#9929B6F6"
+        android:pathData="M30,52 L78,52 L78,76 Q78,80 74,80 L34,80 Q30,80 30,76 Z" />
+
+    <!-- Pflanzen -->
+    <path
+        android:fillColor="#FF43A047"
+        android:pathData="M36,80 Q33,68 38,60 Q39,70 41,80 Z" />
+    <path
+        android:fillColor="#FF66BB6A"
+        android:pathData="M42,80 Q42,70 47,64 Q47,72 46,80 Z" />
+    <path
+        android:fillColor="#FF43A047"
+        android:pathData="M70,80 Q68,70 72,62 Q74,72 74,80 Z" />
+
+    <!-- Fisch -->
+    <path
+        android:fillColor="#FFFF9800"
+        android:pathData="M52,67 Q58,60 65,67 Q58,74 52,67 Z" />
+    <path
+        android:fillColor="#FFFF9800"
+        android:pathData="M64,67 L69,63 L69,71 Z" />
+    <path
+        android:fillColor="#FF0B2A4A"
+        android:pathData="M54.5,65.5 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0" />
+
+    <!-- Blasen -->
+    <path
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M50,58 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" />
+    <path
+        android:fillColor="#CCFFFFFF"
+        android:pathData="M53,54 m-1,0 a1,1 0 1,0 2,0 a1,1 0 1,0 -2,0" />
+
+    <!-- Glasbecken -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFE3F2FD"
+        android:strokeWidth="2.5"
+        android:strokeLineJoin="round"
+        android:pathData="M30,44 L30,76 Q30,80 34,80 L74,80 Q78,80 78,76 L78,44" />
+
+    <!-- LED-Leiste -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30,31 L78,31 Q80,31 80,33 L80,35 Q80,37 78,37 L30,37 Q28,37 28,35 L28,33 Q28,31 30,31 Z" />
+    <path
+        android:fillColor="#FFFFEB3B"
+        android:pathData="M36,34 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FFFFEB3B"
+        android:pathData="M46,34 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FFFFEB3B"
+        android:pathData="M54,34 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FFFFEB3B"
+        android:pathData="M62,34 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+    <path
+        android:fillColor="#FFFFEB3B"
+        android:pathData="M72,34 m-1.4,0 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+</vector>

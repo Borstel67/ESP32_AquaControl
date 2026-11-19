@@ -30,6 +30,8 @@ public:
 
 	// Zusätzliche Routen der Anwendung registrieren (vor startSTA() setzen; wird einmalig aufgerufen)
 	void setExtraRoutes(std::function<void(AsyncWebServer&)> fn) { extraRoutes = std::move(fn); }
+	// POST /factory: löscht WLAN-Config und ruft diesen Hook zum Löschen der Anwendungsdaten auf
+	void setFactoryResetHook(std::function<void()> fn) { factoryResetHook = std::move(fn); }
 
 	void setHtmlPathPrefix(const String& prefix);
 	void setHostname(const String& host);
@@ -59,12 +61,14 @@ private:
 		const String& ntp1,
 		const String& ntp2);
 	void handleErase(AsyncWebServerRequest* request);
+	void handleFactoryReset(AsyncWebServerRequest* request);
 
 	void loadCredentials();
 	bool parseIP(const String& text, IPAddress& out);
 
 	AsyncWebServer   staServer;
 	std::function<void(AsyncWebServer&)> extraRoutes;
+	std::function<void()> factoryResetHook;
 
 	String  htmlPathPrefix;
 	String  hostname;

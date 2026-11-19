@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <title>MQTT</title>
+    <link rel="stylesheet" type="text/css" href="WifiManager.css">
+</head>
+<body>
+    <div class="app wide">
+        <div class="header">
+            <div class="title">
+                <div class="logo" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="wifi-icon" aria-hidden="true">
+                        <path d="M4 9a12 12 0 0 1 16 0M7 13a8 8 0 0 1 10 0M10 17a4 4 0 0 1 4 0M12 20h.01" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h1>MQTT</h1>
+                    <div class="hint" style="margin:0" id="st">…</div>
+                </div>
+            </div>
+            <div class="actions">
+                <a class="gear" href="/led" title="LED-Steuerung" aria-label="LED-Steuerung">💡</a>
+                <a class="gear" href="/water" title="Wasserqualität" aria-label="Wasserqualität">💧</a>
+                <a class="gear" href="/config" title="Konfiguration" aria-label="Konfiguration">⚙️</a>
+            </div>
+        </div>
+        <nav class="pagenav" aria-label="Navigation">
+            <a class="btn" href="/">🏠 Startseite</a>
+        </nav>
+
+        <form id="form" autocomplete="off">
+            <div class="card">
+                <section class="sec">
+                    <h2>Broker</h2>
+                    <div class="row">
+                        <label></label>
+                        <label class="switch"><input id="enabled" type="checkbox" /> MQTT aktivieren</label>
+                    </div>
+                    <div class="row">
+                        <label for="host">Host</label>
+                        <input id="host" class="input" type="text" maxlength="63" placeholder="192.168.1.10" />
+                    </div>
+                    <div class="row">
+                        <label for="port">Port</label>
+                        <input id="port" class="input num" type="number" min="1" max="65535" step="1" value="1883" />
+                    </div>
+                    <div class="row">
+                        <label for="user">Benutzer</label>
+                        <input id="user" class="input" type="text" maxlength="31" autocomplete="off" />
+                    </div>
+                    <div class="row">
+                        <label for="pass">Passwort</label>
+                        <input id="pass" class="input" type="password" maxlength="63" autocomplete="new-password" />
+                    </div>
+                    <p class="hint" id="pass-hint">Passwort leer lassen, um das gespeicherte beizubehalten.</p>
+                </section>
+                <section class="sec">
+                    <h2>Veröffentlichung</h2>
+                    <div class="row">
+                        <label for="base">Topic-Präfix</label>
+                        <input id="base" class="input" type="text" maxlength="47" value="aquacontrol" />
+                    </div>
+                    <div class="row">
+                        <label for="interval">Intervall</label>
+                        <input id="interval" class="input num" type="number" min="1" max="3600" step="1" value="10" />
+                        <span class="sep">s</span>
+                    </div>
+                    <p class="hint">Topics: <code id="t1"></code>, <code id="t2"></code>, <code id="t3"></code> (Einstellungen alle 60 s) und <code id="t4"></code> (<code>1</code>/<code>0</code>).</p>
+                </section>
+                <section class="sec">
+                    <div class="footer">
+                        <button type="submit" class="btn primary" id="btn-save">Speichern</button>
+                    </div>
+                    <p id="msg" class="hint" style="min-height:1.2em"></p>
+                </section>
+            </div>
+        </form>
+
+        <footer class="copyright">© 2026 R.Wisser · <span id="ver"></span></footer>
+    </div>
+
+    <script>
+        (function () {
+            const VERSION = "1.0.0";
+            const $ = (id) => document.getElementById(id);
+            $("ver").textContent = "v" + VERSION;
+
+            const msg = $("msg");
+            const setMsg = (text, ok) => { msg.className = "hint " + (ok ? "ok" : "err"); msg.textContent = text; };
+
+            const topics = () => {
+                const b = $("base").value.trim().replace(/^\/+|\/+$/g, "") || "…";
+                $("t1").textContent = b + "/status/…";
+                $("t2").textContent = b + "/water/…";
+                $("t3").textContent = b + "/settings/…";
+                $("t4").textContent = b + "/online";
+            };
+            $("base").addEventListener("input", topics);
+
+            // Verbindungsstatus regelmäßig aktualisieren, Formular nur einmal füllen
+            let filled = false;
+            const load = async () => {
+                try {
+                    const r = await fetch("/api/aqua/mqtt", { cache: "no-store" });
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    const c = await r.json();
+                    if (!filled) {
+                        filled = true;
+                        $("enabled").checked = c.enabled;
+                        $("host").value = c.host;
+                        $("port").value = c.port;
+                        $("user").value = c.user;
+                        $("base").value = c.base;
+                        $("interval").value = c.interval;
+                        $("pass-hint").textContent = c.passSet
+                            ? "Ein Passwort ist gespeichert. Leer lassen, um es beizubehalten."
+                            : "Kein Passwort gespeichert.";
+                        topics();
+                    }
+                    $("st").textContent = !c.enabled ? "deaktiviert"
+                        : c.connected ? "verbunden"
+                        : "nicht verbunden" + (c.error ? " – " + c.error : "");
+                } catch (e) {
+                    $("st").textContent = "keine Verbindung zum Gerät";
+                }
+            };
+
+            $("form").addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const body = {
+                    enabled: $("enabled").checked,
+                    host: $("host").value.trim(),
+                    port: +$("port").value,
+                    user: $("user").value,
+                    base: $("base").value,
+                    interval: +$("interval").value
+                };
+                if ($("pass").value) body.pass = $("pass").value;   // leer = unverändert
+                const btn = $("btn-save");
+                btn.disabled = true;
+                try {
+                    const r = await fetch("/api/aqua/mqtt", {
+                        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+                    });
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok || !j.ok) setMsg(j.error || ("Fehlgeschlagen (HTTP " + r.status + ")."), false);
+                    else {
+                        setMsg("Gespeichert.", true);
+                        if (body.pass) { $("pass").value = ""; $("pass-hint").textContent = "Ein Passwort ist gespeichert. Leer lassen, um es beizubehalten."; }
+                        load();
+                    }
+                } catch (err) {
+                    setMsg("Fehler beim Speichern.", false);
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+
+            load();
+            setInterval(load, 3000);
+        })();
+    </script>
+</body>
+</html>

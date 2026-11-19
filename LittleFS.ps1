@@ -18,9 +18,7 @@ if (-not (Get-ChildItem -File -Recurse $src)) { throw "data ist leer: $src" }
 
 & $tool -c $src -b 4096 -p 256 -s $siz $out
 
-& $esptool --chip esp32 --port $Port --baud 921600 write_flash $offset $out
-
- if ($Flash) {
-    & $esptool --chip esp32 --port $Port --baud 921600 `
-        write_flash $offset $out
+if ($Flash) {
+    # --chip auto: erkennt ESP32 / S2 / S3 selbst
+    & $esptool --chip auto --port $Port --baud 921600 write_flash $offset $out
 }

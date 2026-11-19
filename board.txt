@@ -1,4 +1,4 @@
-# ESP32_Aqua_LEDStrip build property overrides
+# ESP32_AquaControl build property overrides
 #
 build.partitions=partitions.csv
 build.filesystem=littlefs

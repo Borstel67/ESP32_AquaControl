@@ -88,6 +88,7 @@ void ESPWiFiManagerSTA::setupHTTPRoutes() {
 	});
 
 	staServer.on("/erase", HTTP_POST, [this](AsyncWebServerRequest* r) { handleErase(r); });
+	staServer.on("/factory", HTTP_POST, [this](AsyncWebServerRequest* r) { handleFactoryReset(r); });
 	if (extraRoutes) extraRoutes(staServer);
 	staServer.onNotFound([this](AsyncWebServerRequest* r) { handleNotFound(r); });
 	AWM_LOGD("HTTP-Routen für STA-Server eingerichtet");
@@ -257,6 +258,21 @@ bool ESPWiFiManagerSTA::saveStaConfigToJson(bool useDhcp,
 void ESPWiFiManagerSTA::handleErase(AsyncWebServerRequest* request) {
 	request->send(200, "application/json", "{\"ok\":true}");
 	::eraseCredentials();
+	restartReqAt = millis();
+	restartPending = true;
+}
+
+// POST /factory (confirm=WERKSEINSTELLUNG): Werkseinstellung – WLAN-Config und Anwendungsdaten
+// (über factoryResetHook) löschen, danach Neustart ohne Zugangsdaten → AP-Modus (Captive-Portal)
+void ESPWiFiManagerSTA::handleFactoryReset(AsyncWebServerRequest* request) {
+	if (request->arg("confirm") != "WERKSEINSTELLUNG") {
+		request->send(400, "application/json", "{\"error\":\"Bestätigung fehlt\"}");
+		return;
+	}
+	request->send(200, "application/json", "{\"ok\":true}");
+	::eraseConfigJson();
+	if (factoryResetHook) factoryResetHook();
+	AWM_LOGI("🧹 Werkseinstellung: Konfiguration gelöscht, Neustart in den AP-Modus");
 	restartReqAt = millis();
 	restartPending = true;
 }

@@ -30,6 +30,8 @@ void eraseCredentials();
 bool loadConfigJson(String& jsonOut);
 bool saveConfigJson(const String& jsonText);
 void eraseConfigJson();
+// Löscht alle Schlüssel eines NVS-Namespaces (Werkseinstellung)
+void eraseNvsNamespace(const char* ns);
 // Config aus NVS laden und deserialisieren; false bei fehlender/ungültiger Config
 bool loadConfigDoc(JsonDocument& doc);
 
@@ -45,6 +47,15 @@ bool syncTimeDefault(uint8_t tries = 20);
 bool ensureArduinoOta(const String& hostname, uint16_t port, const String& password);
 void handleArduinoOta();
 bool checkOtaAndDataPartitions(bool logDetails = false);
+
+// OTA-Rollback: neue Firmware muss sich nach dem Update bewähren, sonst Rückkehr zur vorherigen Version.
+// otaRollbackBegin() früh in setup() aufrufen (startet Frist, nur aktiv beim ersten Start nach einem Update);
+// otaRollbackLoop() in loop() – bestätigt die Firmware, sobald healthy && Laufzeit >= minUptimeMs.
+// Neustart/Absturz/Hänger vor der Bestätigung oder Fristablauf → Rollback.
+void otaRollbackBegin(uint32_t timeoutMs);
+void otaRollbackLoop(bool healthy, uint32_t minUptimeMs);
+bool otaRollbackPending();
+void otaRollbackReportLastBoot();   // loggt, falls zuvor ein Rollback stattfand
 
 // HTTP 302 → Root (no-cache); gemeinsam für AP und STA
 void redirectToRoot(AsyncWebServerRequest* request);

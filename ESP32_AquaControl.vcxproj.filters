@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ESP32_Aqua_LEDStrip.ino" />
+    <ClCompile Include="ESP32_AquaControl.ino" />
     <ClCompile Include="src\AWM_Logging.h">
       <Filter>Header Files</Filter>
     </ClCompile>
@@ -40,9 +40,18 @@
     <ClCompile Include="src\AquaController.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\AquaWater.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AquaMqtt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AquaDisplay.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="__vm\.ESP32_Aqua_LEDStrip.vsarduino.h">
+    <ClInclude Include="__vm\.ESP32_AquaControl.vsarduino.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\ESPWiFiManagerSTA.h">
@@ -60,6 +69,18 @@
     <ClInclude Include="src\AquaController.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\AquaWater.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AquaMqtt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\AquaDisplay.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="__vm\.ESP32_Aqua_LEDStrip.vsarduino.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include=".github\copilot-instructions.md" />
@@ -73,6 +94,8 @@
     <None Include="partitions.csv" />
     <None Include="data\settings.html" />
     <None Include="data\led.html" />
+    <None Include="data\water.html" />
+    <None Include="data\dashboard.html" />
     <None Include="data\config.html" />
     <None Include="App-OTA.ps1" />
     <None Include="Firmware-OTA.ps1" />

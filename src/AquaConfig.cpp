@@ -92,7 +92,7 @@ bool textToRanges(const char* s, LedRange* r, uint16_t maxLed, String& err) {
         const String item = text.substring(pos, sep);
         pos = sep + 1;
         if (!item.length()) continue;
-        if (n >= kMoonRanges) { err = "Maximal 3 Mond-Bereiche"; return false; }
+        if (n >= kMoonRanges) { err = "Maximal " + String(kMoonRanges) + " Mond-Bereiche"; return false; }
 
         unsigned a, b;
         char dash;

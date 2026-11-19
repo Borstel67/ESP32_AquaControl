@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <title>Wasserqualität</title>
+    <link rel="stylesheet" type="text/css" href="WifiManager.css">
+</head>
+<body>
+    <div class="app wide">
+        <div class="header">
+            <div class="title">
+                <div class="logo" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" class="wifi-icon" aria-hidden="true">
+                        <path d="M12 3c3 4.5 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-6.5 6-11z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1>Wasserqualität</h1>
+                    <div class="hint" style="margin:0" id="st-ads">…</div>
+                </div>
+            </div>
+            <div class="actions">
+                <a class="gear" href="/led" title="LED-Steuerung" aria-label="LED-Steuerung">💡</a>
+                <a class="gear" href="/config" title="Konfiguration" aria-label="Konfiguration">⚙️</a>
+            </div>
+        </div>
+        <nav class="pagenav" aria-label="Navigation">
+            <a class="btn" href="/">🏠 Startseite</a>
+        </nav>
+
+        <!-- Live-Werte (Abfrage jede Sekunde) -->
+        <div class="card" id="st-card">
+            <section class="sec">
+                <h2>Messwerte</h2>
+                <div class="tiles">
+                    <div class="tile"><div class="k">pH-Wert</div><div class="v" id="v-ph">–</div><div class="s" id="s-ph">DFRobot Gravity</div></div>
+                    <div class="tile"><div class="k">TDS</div><div class="v" id="v-tds">–</div><div class="s" id="s-tds">CQRobot</div></div>
+                    <div class="tile"><div class="k">Leitwert</div><div class="v" id="v-ec">–</div><div class="s">TDS × 2</div></div>
+                    <div class="tile"><div class="k">Wassertemperatur</div><div class="v" id="v-temp">–</div><div class="s" id="s-temp">nur Anzeige</div></div>
+                </div>
+            </section>
+        </div>
+
+        <div class="card">
+            <section class="sec">
+                <h2>Sensoren</h2>
+                <div class="row">
+                    <label></label>
+                    <label class="switch"><input id="en-ph" type="checkbox" /> pH-Sensor angeschlossen (AIN0)</label>
+                </div>
+                <div class="row">
+                    <label></label>
+                    <label class="switch"><input id="en-tds" type="checkbox" /> TDS-Sensor angeschlossen (AIN1)</label>
+                </div>
+                <p class="hint">Nicht angeschlossene Sensoren abschalten: ein offener ADS1115-Eingang liefert sonst zufällige Werte.</p>
+            </section>
+            <section class="sec">
+                <h2>Temperaturkompensation</h2>
+                <div class="row">
+                    <label></label>
+                    <label class="switch"><input id="tc-ph" type="checkbox" /> pH temperaturkompensiert</label>
+                </div>
+                <div class="row">
+                    <label></label>
+                    <label class="switch"><input id="tc-tds" type="checkbox" /> TDS / Leitwert auf 25 °C umrechnen</label>
+                </div>
+                <p class="hint">Nutzt die Wassertemperatur (DS18B20). pH: Elektrodensteilheit nach Nernst, Bezug ist die Temperatur bei der Puffer-Kalibrierung (<code id="c-pht">–</code>). TDS/Leitwert: 2 %/°C, Bezug 25 °C. Ohne gültige Temperatur wird nicht kompensiert. <span id="tc-state"></span></p>
+            </section>
+            <section class="sec">
+                <h2>pH-Kalibrierung</h2>
+                <p class="hint">Sensor spülen, in Pufferlösung tauchen, ca. 1 Minute warten bis der Wert stabil ist, dann übernehmen.</p>
+                <div class="row">
+                    <label>pH 7,00</label>
+                    <span class="sep" id="c-ph7">–</span>
+                    <button type="button" class="btn" id="btn-ph7">Puffer pH 7 übernehmen</button>
+                </div>
+                <div class="row">
+                    <label>pH 4,00</label>
+                    <span class="sep" id="c-ph4">–</span>
+                    <button type="button" class="btn" id="btn-ph4">Puffer pH 4 übernehmen</button>
+                </div>
+                <p class="hint">Zuerst pH 7, dann pH 4. Aktuelle Sensorspannung: <code id="v-phmv">–</code></p>
+            </section>
+            <section class="sec">
+                <h2>pH manuell einstellen</h2>
+                <div class="row">
+                    <label for="in-v7">Spannung pH 7</label>
+                    <input id="in-v7" class="input num" type="number" min="1" max="3300" step="0.1" />
+                    <span class="sep">mV</span>
+                </div>
+                <div class="row">
+                    <label for="in-v4">Spannung pH 4</label>
+                    <input id="in-v4" class="input num" type="number" min="1" max="3300" step="0.1" />
+                    <span class="sep">mV</span>
+                    <button type="button" class="btn" id="btn-vmanual">Spannungen übernehmen</button>
+                </div>
+                <div class="row">
+                    <label for="in-phoff">pH-Offset</label>
+                    <input id="in-phoff" class="input num" type="number" min="-3" max="3" step="0.01" />
+                    <span class="sep">pH</span>
+                    <button type="button" class="btn" id="btn-phoff">Offset übernehmen</button>
+                </div>
+                <p class="hint">Die Spannungen ersetzen die Kalibrierpunkte (mindestens 100 mV Abstand). Der Offset wird zum berechneten pH-Wert addiert, z. B. +0,50 wenn das Gerät 0,5 zu niedrig anzeigt.</p>
+            </section>
+            <section class="sec">
+                <h2>TDS-Kalibrierung</h2>
+                <div class="row">
+                    <label for="tds-ref">Referenzlösung</label>
+                    <input id="tds-ref" class="input num" type="number" min="10" max="5000" step="1" value="1000" />
+                    <span class="sep">ppm</span>
+                    <button type="button" class="btn" id="btn-tds">Übernehmen</button>
+                </div>
+                <p class="hint">Sensor in die Referenzlösung (z. B. 1000 ppm) tauchen, warten bis der Wert stabil ist. Korrekturfaktor: <code id="c-tds">–</code> · Sensorspannung: <code id="v-tdsmv">–</code></p>
+            </section>
+            <section class="sec">
+                <div class="footer">
+                    <button type="button" class="btn" id="btn-reset">Kalibrierung zurücksetzen</button>
+                </div>
+                <p id="msg" class="hint" style="min-height:1.2em"></p>
+            </section>
+        </div>
+
+        <footer class="copyright">© 2026 R.Wisser · <span id="ver"></span></footer>
+    </div>
+
+    <script>
+        (function () {
+            const VERSION = "2.1.0";
+            const $ = (id) => document.getElementById(id);
+            $("ver").textContent = "v" + VERSION;
+
+            const msg = $("msg");
+            const setMsg = (text, ok) => { msg.className = "hint " + (ok ? "ok" : "err"); msg.textContent = text; };
+            const fmt = (v, d, unit) => v == null ? "–" : v.toFixed(d) + (unit ? " " + unit : "");
+
+            const poll = async () => {
+                try {
+                    const r = await fetch("/api/aqua/water", { cache: "no-store" });
+                    if (!r.ok) throw new Error("HTTP " + r.status);
+                    const s = await r.json();
+                    $("st-ads").textContent = s.ads ? "ADS1115 verbunden" : "ADS1115 nicht gefunden";
+
+                    const ph = $("v-ph");
+                    ph.textContent = fmt(s.ph, 2, "");
+                    ph.classList.toggle("err", s.ph == null || s.ph < 0 || s.ph > 14);
+                    ph.classList.toggle("err", s.phEn && (s.ph == null || s.ph < 0 || s.ph > 14));
+                    $("s-ph").textContent = !s.phEn ? "nicht angeschlossen" : !s.ads ? "kein ADS1115" : s.ph == null ? "kein Sensorsignal" : "DFRobot Gravity";
+                    $("v-tds").textContent = fmt(s.tds, 0, "ppm");
+                    $("s-tds").textContent = !s.tdsEn ? "nicht angeschlossen" : !s.ads ? "kein ADS1115" : s.tds == null ? "kein Sensorsignal" : "CQRobot";
+                    $("en-ph").checked = s.phEn;
+                    $("en-tds").checked = s.tdsEn;
+                    $("btn-ph7").disabled = $("btn-ph4").disabled = !s.phEn;   // manuelle Eingabe bleibt immer möglich
+                    $("btn-tds").disabled = !s.tdsEn;
+                    $("v-ec").textContent = fmt(s.ec, 0, "µS/cm");
+                    $("v-temp").textContent = s.temp == null ? "25 °C (Annahme)" : fmt(s.temp, 2, "°C");
+                    const tcAny = s.phTc || s.tdsTc;
+                    $("s-temp").textContent = !tcAny ? "nur Anzeige" : s.tcOk ? "für Kompensation" : "ungültig – keine Kompensation";
+                    $("tc-ph").checked = !!s.phTc;
+                    $("tc-tds").checked = !!s.tdsTc;
+                    $("c-pht").textContent = fmt(s.cal.phT, 1, "°C");
+                    $("tc-state").textContent = tcAny && !s.tcOk ? "⚠️ Temperatur derzeit ungültig." : "";
+
+                    $("v-phmv").textContent = fmt(s.phMv, 0, "mV");
+                    $("v-tdsmv").textContent = fmt(s.tdsMv, 0, "mV");
+                    $("c-ph7").textContent = fmt(s.cal.ph7, 0, "mV");
+                    $("c-ph4").textContent = fmt(s.cal.ph4, 0, "mV");
+                    $("c-tds").textContent = s.cal.tdsK.toFixed(3);
+                    // Eingabefelder nur füllen, solange der Nutzer nicht gerade tippt
+                    const fill = (id, v) => { const el = $(id); if (document.activeElement !== el && !el.dataset.dirty) el.value = v; };
+                    fill("in-v7", s.cal.ph7);
+                    fill("in-v4", s.cal.ph4);
+                    fill("in-phoff", s.cal.phOff);
+                    $("st-card").style.opacity = "";
+                } catch (e) {
+                    $("st-ads").textContent = "keine Verbindung";
+                    $("st-card").style.opacity = "0.5";   // Werte veraltet
+                }
+            };
+
+            const calibrate = async (body, btn) => {
+                btn.disabled = true;
+                try {
+                    const r = await fetch("/api/aqua/water/cal", {
+                        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+                    });
+                    const j = await r.json().catch(() => ({}));
+                    if (!r.ok || !j.ok) setMsg(j.error || ("Fehlgeschlagen (HTTP " + r.status + ")."), false);
+                    else {
+                        setMsg("Kalibrierung gespeichert.", true);
+                        ["in-v7", "in-v4", "in-phoff"].forEach((id) => delete $(id).dataset.dirty);
+                        poll();
+                    }
+                } catch (e) {
+                    setMsg("Fehler bei der Kalibrierung.", false);
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+
+            $("btn-ph7").addEventListener("click", (e) => calibrate({ ph7: true }, e.target));
+            $("btn-ph4").addEventListener("click", (e) => calibrate({ ph4: true }, e.target));
+            $("btn-tds").addEventListener("click", (e) => calibrate({ tds: +$("tds-ref").value }, e.target));
+            ["in-v7", "in-v4", "in-phoff"].forEach((id) => $(id).addEventListener("input", (e) => { e.target.dataset.dirty = "1"; }));
+            $("btn-vmanual").addEventListener("click", (e) => {
+                const v7 = $("in-v7").value, v4 = $("in-v4").value;
+                if (v7 === "" || v4 === "") { setMsg("Beide Spannungen eingeben.", false); return; }
+                calibrate({ phV7: +v7, phV4: +v4 }, e.target);
+            });
+            $("btn-phoff").addEventListener("click", (e) => {
+                const v = $("in-phoff").value;
+                if (v === "") { setMsg("Offset eingeben (0 = aus).", false); return; }
+                calibrate({ phOff: +v }, e.target);
+            });
+            $("en-ph").addEventListener("change", (e) => calibrate({ phEn: e.target.checked }, e.target));
+            $("en-tds").addEventListener("change", (e) => calibrate({ tdsEn: e.target.checked }, e.target));
+            $("tc-ph").addEventListener("change", (e) => calibrate({ phTc: e.target.checked }, e.target));
+            $("tc-tds").addEventListener("change", (e) => calibrate({ tdsTc: e.target.checked }, e.target));
+            $("btn-reset").addEventListener("click", (e) => {
+                if (confirm("Kalibrierung auf Werkseinstellung zurücksetzen?")) calibrate({ reset: true }, e.target);
+            });
+
+            poll();
+            setInterval(poll, 1000);
+        })();
+    </script>
+</body>
+</html>
